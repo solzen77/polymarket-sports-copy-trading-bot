@@ -1,286 +1,224 @@
-# UTXO Management Project
+# Polymarket Sports Trailing Bot
 
-This guide provides explaining how to utilize them effectively for managing UTXOs (Unspent Transaction Outputs) in a Bitcoin-based application.
+A Rust bot for [Polymarket](https://polymarket.com) that trades **sports (binary) markets** by slug using a **trailing stop** strategy only. It monitors a single market’s two outcome tokens and buys when prices recover after a dip, then hedges by buying the opposite side.
 
-## Scripts Description
+---
 
+## Table of Contents
 
-### `npm run split`
+- [Overview](#overview)
+- [How It Works](#how-it-works)
+- [Project Structure](#project-structure)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [CLOB SDK and credentials](#clob-sdk-and-credentials)
+- [Command-Line Options](#command-line-options)
+- [Simulation vs Live](#simulation-vs-live)
+- [Finding a Market Slug](#finding-a-market-slug)
+- [Security](#security)
+- [Notes](#notes)
+- [Support](#support)
 
-- **Purpose**: Splits a larger UTXO into multiple 546 sats UTXOs. This is useful for transaction privacy and for creating denominations that are easier to split UTXO accurately.
-- **Usage**: Run `npm run split` to divide a large UTXO into small ones according to specified criteria.
+---
 
-### `npm run merge`
+## Overview
 
-- **Purpose**: Designed to merge multiple UTXOs into a single UTXO, which can be beneficial for simplifying wallet management and reducing the cost of future transactions.
-- **Usage**: Execute `npm run merge` to combine several small UTXOs into one.
+- **Target:** Binary (Yes/No) sports markets on Polymarket, identified by **slug** (e.g. `nfl-team-a-vs-team-b`).
+- **Strategy:** Trailing stop only — no fixed trigger prices. The bot tracks both outcome tokens and buys when the ask price recovers to at least **lowest seen + trailing stop** (e.g. +3¢).
+- **Flow:**  
+  1. Trail both tokens; the first side that satisfies the recovery condition is bought.  
+  2. Then trail the **opposite** token the same way and buy when it triggers.  
+  3. **Once:** one pair of buys per market. **Continuous:** after both sides are bought, reset and repeat until the market ends.
 
-### `npm run send`
+---
 
-- **Purpose**: Facilitates the sending of Bitcoins from one address to another. This script likely handles the creation and broadcasting of the transaction to the Bitcoin network.
-- **Usage**: Use `npm run send` to specify the details (e.g., recipient's address) and send the UTXO.
+## How It Works
 
-## Installation
+### Trailing logic
 
-To set up and run this project locally, follow these steps:
+- For each token the bot maintains a **low** (minimum ask seen) and **high** (maximum ask seen).
+- **Trigger:** buy when current ask ≥ low + `trailing_stop_point` (e.g. `0.03` = 3¢).
+- The bot buys the token whose price **dipped first and then recovered**; then it trails and buys the other token with the same rule.
 
-1. **Clone the Repository**: First, clone this repository to your local machine using:
-   ```bash
-   git clone https://github.com/bitmapers/utxo-management.git
-   ```
+### Internal states
 
-2. **Install Dependencies**: Navigate into your project directory and install the required dependencies:
-   ```bash
-   cd utxo-management
-   npm install
-   ```
+| State            | Description |
+|------------------|-------------|
+| **WaitingFirst** | Tracking both tokens; waiting for the first side to trigger (ask ≥ low + trailing stop). |
+| **FirstBuyPending** | First order submitted; no new triggers until it resolves. |
+| **FirstBought** | First side filled; now trailing the opposite token only. |
+| **Done** | Both sides bought. If `continuous: true`, state resets to **WaitingFirst** and the cycle repeats. |
 
-3. **Setup Environment Variables**: Copy the `.env.example` file to `.env` and fill in the necessary Bitcoin network details and key management options.
-   ```bash
-   cp .env.example .env
-   ```
+### Execution
 
-4. **Run Scripts**: Use the npm run commands listed above to perform different operations like merging, sending, or splitting UTXOs.
+- Orders are placed as **market orders** via the Polymarket CLOB (Central Limit Order Book).
+- In **simulation** mode, no real orders are sent; the bot logs what it would do.
+- The bot exits when the market’s end time is reached (time remaining = 0) or you stop it (e.g. Ctrl+C).
 
-## Dependencies
+---
 
-- **External Modules**:
-  - `axios`: For making HTTP requests.
-  - `bip32`, `bip39`: For generating Bitcoin wallet addresses from a hierarchical deterministic (HD) path.
-  - `bitcoinjs-lib`: A library for Bitcoin protocol functions.
-  - `dotenv`: Loads environment variables from a `.env` file.
-  - `ecpair`: Represents an elliptic curve pair.
-  - `tiny-secp256k1`: For elliptic curve cryptography operations.
+## Project Structure
 
-- **Development Modules**:
-  - `@types/node`: TypeScript type definitions for Node.js.
-  - `ts-node`: TypeScript execution environment and REPL for Node.js.
-  - `typescript`: The TypeScript compiler.
+| Path | Description |
+|------|-------------|
+| `src/bin/main_sports_trailing.rs` | Entry point: loads config, fetches market by slug, runs the trailing state machine. |
+| `src/trader.rs` | Order execution (market/limit), CLOB SDK calls, hedge logic, position tracking. |
+| `src/api.rs` | Polymarket Gamma + CLOB HTTP API: auth, market by slug, market details, prices, order placement. |
+| `src/config.rs` | CLI args and config types (`Config`, `PolymarketConfig`, `TradingConfig`). |
+| `src/models.rs` | Market, Token, OrderBook, TokenPrice, OrderRequest, etc. |
+| `src/clob_sdk.rs` | FFI to CLOB shared library (order signing, post limit/market, balance). |
+| `src/detector.rs` | Buy opportunity types and token types (used by trader). |
+| `src/monitor.rs` | Market monitoring and snapshots (used by other bots; sports bot uses API directly). |
+| `src/simulation.rs` | Simulation tracker: positions, PnL, limit orders in simulation. |
 
+---
 
-## File Structure
-Briefly describe the folder and file structure.
-```plaintext
-/ - Root directory
-|__ /utils - Utility scripts
-   |__ utxo.ts - Fetch UTXOs for a given address.
-   |__ wallet.ts - Represents a Bitcoin wallet functionality.
-|__ config.ts - Configuration including to Bitcoin network.
-|__ index.ts - Main script for executing transactions.
-|__ sendUTXO.ts - Send UTXO to other bitcoin address.
-|__ splitUTXO.ts - Split UTXO into smaller UTXOs with big UTXO.
-|__ mergeUTXO.ts - Merge UTXO into one big UTXO with small UTXOs.
+## Requirements
+
+- **Rust** 2021 (e.g. install via [rustup](https://rustup.rs)).
+- **Polymarket CLOB SDK** in `lib/` and **valid config credentials** (see [CLOB SDK](#clob-sdk-live-mode-only)). Required for both simulation and live; simulation does not place real orders.
+
+---
+
+## Quick Start
+
+| Binary | Description |
+|--------|-------------|
+| `main_sports_trailing` | Sports trailing bot (default) — slug-based, trailing only |
+
+```bash
+# Build
+cargo build --release
+
+# Simulation (no real orders; still requires CLOB SDK in lib/ and valid config credentials)
+cargo run --release -- --simulation
+
+# Live (same requirements; places real orders)
+cargo run --release -- --no-simulation
 ```
 
+Create `config.json` from `config.example.json`, set `trading.slug` to your market slug, and for live mode fill in Polymarket API credentials and (if needed) `private_key` / proxy settings.
 
-## Utils Functions
+---
 
-### Interfaces
+## Configuration
 
-- **IUtxo:** Interface for Unspent Transaction Outputs which include:
-  - **txid:** Transaction ID.
-  - **vout:** Output number in the transaction.
-  - **value:** Value of the output in satoshis.
+Config file path is set with `--config <path>` (default: `config.json`). The sports trailing bot uses the following.
 
-### Functions
+### Polymarket (API & auth)
 
-#### getScriptPubkey(tx: string, address: string): Promise<string>
+| Field | Description |
+|-------|-------------|
+| `gamma_api_url` | Gamma API base URL (e.g. `https://gamma-api.polymarket.com`). |
+| `clob_api_url` | CLOB API base URL (e.g. `https://clob.polymarket.com`). |
+| `api_key` | Polymarket API key (required for live). |
+| `api_secret` | Polymarket API secret. |
+| `api_passphrase` | Polymarket API passphrase. |
+| `private_key` | Private key for order signing (hex, with or without `0x`). |
+| `proxy_wallet_address` | Optional proxy wallet address. |
+| `signature_type` | `0` = EOA, `1` = POLY_PROXY, `2` = GNOSIS_SAFE. |
 
-Fetches the script pubkey associated with a specific output address in a transaction.
+### Trading (sports trailing)
 
-**Parameters:**
-- `tx`: The transaction ID as a string.
-- `address`: The Bitcoin address as a string.
+| Field | Description |
+|-------|-------------|
+| `slug` | **Required.** Market slug (e.g. `your-sports-market-slug`). |
+| `continuous` | If `true`, after buying both sides the bot resets and trails/buys again until the market ends; if `false`, it buys each side once per market. |
+| `trailing_stop_point` | Trailing stop in price units (e.g. `0.03` = 3¢). Trigger when ask ≥ lowest + this. |
+| `trailing_shares` | Target number of shares per side (first and second buy). |
+| `fixed_trade_amount` | Used if `trailing_shares` is not set; shares derived from this and price. |
+| `check_interval_ms` | Polling interval in ms (e.g. `1000`). |
+| `min_time_remaining_seconds` | Minimum seconds left before placing a new trade (default 30). Set to **0** to trade until market closure. |
+| `sell_price` | Optional; used by other strategies; sports trailing focuses on buy-side trailing. |
 
-**Returns:** A promise that resolves to the script pubkey as a string.
+Example minimal `config.json` for the sports bot:
 
-#### getUtxos(address: string): Promise<IUtxo[]>
-
-Retrieves all UTXOs for a given Bitcoin address.
-
-**Parameters:**
-- `address`: The Bitcoin address as a string.
-
-**Returns:** A promise that resolves to an array of UTXOs.
-
-#### pushBTCpmt(rawtx: any): Promise<string>
-
-Pushes a raw Bitcoin transaction to the network.
-
-**Parameters:**
-- `rawtx`: The raw transaction data.
-
-**Returns:** A promise that resolves to the transaction ID.
-
-#### postData(url: string, json: any, content_type?: string, apikey?: string): Promise<string | undefined>
-
-General function to send POST requests. Handles error retries related to specific blockchain-related errors.
-
-**Parameters:**
-- `url`: The API endpoint.
-- `json`: The JSON payload for the post request.
-- `content_type`: (Optional) Content type of the request, defaults to `"text/plain"`.
-- `apikey`: (Optional) API key for authenticated requests.
-
-**Returns:** A promise that resolves to the response data as a string or undefined in case of specific errors.
-
-### Usage Example
-
-#### Getting UTXOs for a Bitcoin Address
-
-```typescript
-import { getUtxos } from './path_to_module';
-
-async function displayUtxos() {
-  const address = 'bitcoin_address_here';
-  const utxos = await getUtxos(address);
-  console.log(utxos);
+```json
+{
+  "polymarket": {
+    "gamma_api_url": "https://gamma-api.polymarket.com",
+    "clob_api_url": "https://clob.polymarket.com",
+    "api_key": "",
+    "api_secret": "",
+    "api_passphrase": "",
+    "private_key": "",
+    "proxy_wallet_address": "",
+    "signature_type": 2
+  },
+  "trading": {
+    "slug": "your-sports-market-slug",
+    "continuous": false,
+    "check_interval_ms": 1000,
+    "trailing_stop_point": 0.03,
+    "trailing_shares": 10.0,
+    "fixed_trade_amount": 1.0,
+    "min_time_remaining_seconds": 30,
+    "sell_price": 0.99
+  }
 }
-
-displayUtxos();
 ```
 
-#### Pushing a Bitcoin Transaction
+---
 
-```typescript
-import { pushBTCpmt } from './path_to_module';
+## CLOB SDK and credentials
 
-async function sendTransaction() {
-  const rawTransaction = 'raw_transaction_data_here';
-  const txid = await pushBTCpmt(rawTransaction);
-  console.log(`Transaction ID: ${txid}`);
-}
+**Both simulation and live** require the Polymarket CLOB SDK in `lib/` and valid API credentials in config. The bot authenticates the same way in both modes; only live mode places real orders.
 
-sendTransaction();
-```
+- **Linux:** `lib/libclob_sdk.so`
+- **macOS:** `lib/libclob_sdk.dylib` or `lib/libclob_sdk.so`
+- **Windows:** `lib/clob_sdk.dll`
 
+Override the library path with the **`LIBCOB_SDK_SO`** environment variable.
 
+Build the CLOB SDK (e.g. from the official Polymarket CLOB client repo) with the client/order FFI and place the resulting shared library in `lib/`, or set `LIBCOB_SDK_SO` to its full path.
 
-## Calculation Fee Function: `calculateTxFee`
+---
 
-#### Purpose:
+## Command-Line Options
 
-Calculates the estimated transaction fee for a given PSBT and fee rate. The fee rate is typically expressed in satoshis per byte.
+| Option | Description |
+|--------|-------------|
+| `--simulation` | Run in simulation (default: true). Same CLOB SDK and credentials as live; no real orders. |
+| `--no-simulation` | Run in live mode; places real orders. |
+| `--config <path>` | Config file path (default: `config.json`). |
 
-#### Parameters:
+---
 
-- `psbt` (Bitcoin.Psbt): The partially signed Bitcoin transaction.
-- `feeRate` (number): The fee rate in satoshis per byte.
+## Simulation vs Live
 
-#### Implementation Details:
+| Mode | CLOB SDK & credentials | Orders | Use case |
+|------|------------------------|--------|----------|
+| `--simulation` (default) | Required | None | Test auth and strategy without placing real orders. |
+| `--no-simulation` | Required | Real market orders | Live trading. |
 
-1. **Mock Output Script Creation**:
-   - A dummy output script (`MOCK_OUTPUT_SCRIPT`) and value (`MOCK_OUTPUT_VALUE`) are used to mimic a real transaction condition by adding an additional output. This helps in more accurately estimating the size of the final transaction.
+---
 
-2. **Transaction Construction**:
-   - A new Bitcoin transaction is instantiated.
-   - Inputs and their corresponding witness data from the PSBT are added to this new transaction.
-   - All outputs (from the PSBT and the mock output) are added to the transaction.
+## Finding a Market Slug
 
-3. **Size Calculation and Fee Estimation**:
-   - The virtual size of the transaction is calculated. The virtual size is a more accurate measure for fee calculation as it considers the weight of witness data.
-   - The transaction's virtual size is multiplied by the provided fee rate to estimate the fee in satoshis.
+1. Open the market on Polymarket in your browser.
+2. The URL often looks like: `https://polymarket.com/event/<slug>` or `.../market/...`.
+3. The **slug** is the URL segment that identifies the market (e.g. `nfl-team-a-vs-team-b`). Use this exact value for `trading.slug` in `config.json`.
 
-#### Returns:
+---
 
-- (number): The calculated transaction fee in satoshis.
+## Security
 
-### Example Usage
+- **Do not** commit `config.json` with real API keys, secrets, or private keys. Use `.gitignore` for `config.json`.
+- Prefer **simulation** and small sizes when testing.
+- Monitor logs and balances when running in production.
 
-```javascript
-const feeRate = 1; // 1 satoshi per byte
-const estimatedFee = calculateTxFee(psbt, feeRate);
-console.log(`Estimated Transaction Fee: ${estimatedFee} satoshis`);
-```
+---
 
+## Notes
 
-## Send UTXO Function
+- The bot runs until the market end time (time remaining = 0) or you stop it (e.g. Ctrl+C).
+- Simulation mode logs trades but does not place orders.
+- The first buy uses a minimum cost of $1 (see `MIN_FIRST_BUY_COST` in the binary) when deriving size from price; `trailing_shares` or `fixed_trade_amount` still apply as configured.
 
-`main(sendToAddress: string)`: this asynchronous function takes a single parameter, `sendToAddress`, which is the Bitcoin address where the funds will be sent.
+---
 
-#### Detailed Workflow
+## Support
 
-1. **Wallet Initialization**
-    - Create an instance of the `Wallet` from the `utils/wallet` module.
-    - Log the wallet's address to the console.
-
-2. **UTXO Retrieval**
-    - Fetch UTXOs (Unspent Transaction Outputs) associated with the wallet’s address using the `getUtxos` function from `utils/utxo`.
-    - Find a suitable UTXO that has a value greater than 10,000 satoshis. If no such UTXO is found, the function throws an error.
-
-3. **PSBT Creation**
-    - Initialize a new PSBT (Partially Signed Bitcoin Transaction) specifying the Bitcoin testnet.
-    - Add the selected UTXO as an input to the PSBT.
-    - Define the transaction outputs:
-        - One output sending the intended amount (UTXO value minus initial fee) to `sendToAddress`.
-        - Another output to send the remaining balance (initial fee minus calculated transaction fee) back to the wallet's address as a change.
-
-4. **Transaction Fee Calculation**
-    - Calculate the transaction fee using the transaction’s virtual size and a predefined testnet fee rate.
-
-5. **Transaction Signing**
-    - Sign the PSBT using the wallet’s private keys.
-
-6. **Transaction Extraction and Broadcast**
-    - Extract the signed transaction from the PSBT.
-    - Convert the transaction to its hexadecimal representation.
-    - Broadcast the transaction to the Bitcoin testnet using the `pushBTCpmt` function.
-
-    
-## Split UTXO Function
-
-`main()`: this asynchronous function with no parameter
-
-#### Detailed Workflow
-
-1. **Create Wallet Instance**: 
-   - Instantiate a new wallet, which will autogenerate a new address and keypair.
-
-2. **Fetch UTXOs**:
-   - Retrieve all available UTXOs for the wallet address that have a balance greater than a specified amount (10,000 satoshis in this script).
-
-3. **Transaction Construction**:
-   - Create a new `Psbt` (Partially Signed Bitcoin Transaction).
-   - Add inputs and outputs to the `Psbt`. Each output sends a fixed amount (546 satoshis in this example) to the wallet address.
-   - Calculate and subtract the transaction fees and send the remaining balance back to the wallet address.
-
-4. **Signing the Transaction**:
-   - The transaction is signed using the wallet's private key.
-
-5. **Broadcast Transaction**:
-   - The transaction, once signed, is converted to hexadecimal format and broadcasted to the network, returning a transaction ID.
-
-
-
-## Merge UTXO Function
-
-`main()`: this asynchronous function with no parameter
-
-#### Detailed Workflow
-
-1. **Initialize Wallet**:
-   - Creates a new wallet instance which will be used to gather UTXOs and sign the transaction.
-   
-2. **Fetch UTXOs**:
-   - Calls `getUtxos` to retrieve UTXOs for the wallet address.
-
-3. **Prepare Partially Signed Bitcoin Transaction (PSBT)**:
-   - Initializes a PSBT object specific to the Bitcoin testnet.
-   - Adds inputs for each retrieved UTXO including the necessary details like wallet public key for taproot spend.
-
-4. **Calculate Transaction Fee**:
-   - Uses a mock output and fee rate to calculate an appropriate transaction fee based on the virtual size of the transaction.
-
-5. **Add Output**:
-   - Adds an output to the transaction, subtracting the calculated fee from the total input value to set the output value.
-
-6. **Sign PSBT**:
-   - The wallet signs the PSBT.
-
-7. **Broadcast Transaction**:
-   - Extracts the full transaction from PSBT, converts it to hexadecimal, and pushes it to the Bitcoin testnet using `pushBTCpmt`.
-   
-
-# Conclusion
-
-The UTXO Management Project is designed to provide a comprehensive suite of utilities to facilitate efficient handling of Bitcoin transactions, ideally suited for developers and organizations involved in cryptocurrency management. By utilizing the `split`, `merge`, and `send` scripts, users can optimize their transaction processes, whether for enhancing privacy, simplifying wallet management, or executing precise fund transfers.
+If you have any questions or would like a more customized app for specific use cases, please feel free to contact us at the contact information below.
+- Discord: [@solzen77](https://discordapp.com/users/943821362387120129)
