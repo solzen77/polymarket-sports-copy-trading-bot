@@ -45,16 +45,17 @@ export default async function TraderDetailPage({
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-surface/80">
-        <table className="min-w-full text-left text-xs text-slate-300">
-          <thead className="bg-surface">
+        <div className="max-h-[60vh] overflow-auto">
+          <table className="min-w-full text-left text-xs text-slate-300">
+            <thead className="sticky top-0 z-10 bg-surface">
             <tr>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">Market</th>
               <th className="px-3 py-2">Outcome</th>
               <th className="px-3 py-2 text-right">Realized PnL</th>
             </tr>
-          </thead>
-          <tbody>
+            </thead>
+            <tbody>
             {positions.map((p) => {
               const d = new Date(p.timestamp * 1000);
               const when = d.toISOString().replace("T", " ").slice(0, 16);
@@ -78,8 +79,9 @@ export default async function TraderDetailPage({
                 </td>
               </tr>
             )}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

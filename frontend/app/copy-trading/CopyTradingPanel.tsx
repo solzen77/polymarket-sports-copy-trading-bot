@@ -26,6 +26,7 @@ export function CopyTradingPanel({ initialTraders }: Props) {
   const [logLines, setLogLines] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const loadTraderSlugsReqIdRef = useRef(0);
 
   useEffect(() => {
     setMounted(true);
@@ -79,12 +80,14 @@ export function CopyTradingPanel({ initialTraders }: Props) {
       toast.error("Select at least one trader first.");
       return;
     }
+    const reqId = ++loadTraderSlugsReqIdRef.current;
+    const wallets = [...selectedWallets];
     setLoadingTraderSlugs(true);
     try {
       const days = 7;
       const seen = new Set<string>();
       const options: { slug: string; question: string }[] = [];
-      for (const wallet of selectedWallets) {
+      for (const wallet of wallets) {
         const positions = await fetchClosedPositionsForUser(wallet, days);
         for (const p of positions) {
           if (p.slug && !seen.has(p.slug)) {
@@ -93,14 +96,24 @@ export function CopyTradingPanel({ initialTraders }: Props) {
           }
         }
       }
-      setLiveSlugOptions(options);
-      setSelectedOptionSlugs(new Set());
-      toast.success(`Found ${options.length} slug(s) from selected traders’ recent activity.`);
+      if (loadTraderSlugsReqIdRef.current === reqId) {
+        setLiveSlugOptions(options);
+        setSelectedOptionSlugs(new Set());
+        toast.success(`Found ${options.length} slug(s) from selected traders’ recent activity.`);
+      }
     } catch (e) {
       toast.error(String(e));
     } finally {
-      setLoadingTraderSlugs(false);
+      if (loadTraderSlugsReqIdRef.current === reqId) setLoadingTraderSlugs(false);
     }
+  }, [selectedWallets]);
+
+  // When selection changes, don't auto-load. Just clear previous options to avoid confusion/stale data.
+  useEffect(() => {
+    loadTraderSlugsReqIdRef.current += 1;
+    setLoadingTraderSlugs(false);
+    setLiveSlugOptions([]);
+    setSelectedOptionSlugs(new Set());
   }, [selectedWallets]);
 
   useEffect(() => {
