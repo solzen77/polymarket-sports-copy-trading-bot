@@ -2,6 +2,37 @@
 
 Polymarket **sports copy-trading bot** + **Next.js dashboard** for tracking **top sports traders**, selecting traders/markets, and running an automated copy-trading process in **simulation** or **live** mode. Includes an Express API server for Polymarket data (sports, markets, trader history) and real-time-ish bot logs.
 
+## Screenshots (dashboard)
+
+> If any image doesn’t load, make sure the Google Drive file is set to “Anyone with the link can view”.
+
+### Sports list
+![Sports list](https://lh3.googleusercontent.com/d/14f6jCTz7Tf3Ko_80xWtw_pgbeaNTHV5r)
+
+### Sports list (more)
+![Sports list more](https://lh3.googleusercontent.com/d/10weQlogidax_Wk7RmWx4G3dSGoceJgyJ)
+
+### Top traders (SPORTS leaderboard)
+![Top traders](https://lh3.googleusercontent.com/d/1o_i7hwhTk6gsEEEZ9aIxRlQFfxOQFcN3)
+
+### Copy trading (select traders)
+![Copy trading - select traders](https://lh3.googleusercontent.com/d/1mVvm8L88RRDxcVK8-bEZwmgIHvkCQzYW)
+
+### Copy trading (select live slugs)
+![Copy trading - select live slugs](https://lh3.googleusercontent.com/d/1IgOWNwWaSmCwRRw-WpZSSKVuB6P-QbHA)
+
+### Copy trading (bot control + logs)
+![Copy trading - bot control and logs](https://lh3.googleusercontent.com/d/1ovVLCddqD3AHsfhPQUgIuife6sTuVBxT)
+
+### Market detail (chart + outcomes)
+![Market detail](https://lh3.googleusercontent.com/d/100CNLrpENVbQ8LsLKBRNtUu_Bh1yM7XT)
+
+### Trader detail (PnL chart + table)
+![Trader detail](https://lh3.googleusercontent.com/d/1E1X6nbIBw6T4BVtplRQmKMcYuSdcWQVq)
+
+### Copy trading (full page)
+![Copy trading full page](https://lh3.googleusercontent.com/d/19gbnMDiFaaccTNY6DNIhqd1ovAJ0W5qz)
+
 ## What this bot does (plain English)
 
 If you’re not technical, here’s the simple idea:
