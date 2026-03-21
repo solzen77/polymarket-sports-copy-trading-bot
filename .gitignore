@@ -30,3 +30,6 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
+package-lock.json
+frontend/package-lock.json
+

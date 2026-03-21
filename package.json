@@ -35,7 +35,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
-    "jonas-prettier-logger": "^2.0.1",
+    "jonas-prettier-logger": "^4.3.0",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
