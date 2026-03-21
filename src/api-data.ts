@@ -10,6 +10,29 @@ const DEFAULT_GAMMA_API = "https://gamma-api.polymarket.com";
 const DEFAULT_CLOB_API = "https://clob.polymarket.com";
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/** Max parallel Gamma `/events` calls when building the sports tree (balance latency vs upstream load). */
+const SPORTS_TREE_LIVE_FETCH_CONCURRENCY = 12;
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) break;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  const workers = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return results;
+}
+
 export interface DataApiOptions {
   dataApiBase?: string;
   gammaApiBase?: string;
@@ -122,32 +145,57 @@ export async function getSportsTree(
     if (!tagMap.has(key)) tagMap.set(key, { label: s.label || s.sport || tagId, tagId });
   }
 
-  const toTagsWithLive = async (
-    items: Array<{ label: string; tagId: string }>
-  ): Promise<SportsTreeTagWithLive[]> =>
-    Promise.all(
-      items.map(async ({ tagId, label }) => {
-        let liveSlugs: LiveMarketOptionRow[] = [];
-        try {
-          liveSlugs = await getLiveMarketsByTagId(tagId, livePerTag, opts);
-        } catch {
-          /* leave empty on error */
-        }
-        return { label, tagId, liveSlugs };
-      })
-    );
+  const uniqueTags: Array<{ label: string; tagId: string }> = [];
+  const seenTag = new Set<string>();
+  for (const tagMap of byType.values()) {
+    for (const v of tagMap.values()) {
+      const key = v.tagId.toLowerCase();
+      if (seenTag.has(key)) continue;
+      seenTag.add(key);
+      uniqueTags.push(v);
+    }
+  }
+
+  const liveRows = await mapWithConcurrency(
+    uniqueTags,
+    SPORTS_TREE_LIVE_FETCH_CONCURRENCY,
+    async ({ tagId, label }) => {
+      let liveSlugs: LiveMarketOptionRow[] = [];
+      try {
+        liveSlugs = await getLiveMarketsByTagId(tagId, livePerTag, opts);
+      } catch {
+        /* leave empty on error */
+      }
+      return { key: tagId.toLowerCase(), label, tagId, liveSlugs };
+    }
+  );
+
+  const liveByTagId = new Map<string, SportsTreeTagWithLive>();
+  for (const row of liveRows) {
+    liveByTagId.set(row.key, { label: row.label, tagId: row.tagId, liveSlugs: row.liveSlugs });
+  }
+
+  const tagsForItems = (items: Array<{ label: string; tagId: string }>): SportsTreeTagWithLive[] =>
+    items.map(({ tagId, label }) => {
+      const hit = liveByTagId.get(tagId.toLowerCase());
+      return {
+        label,
+        tagId,
+        liveSlugs: hit?.liveSlugs ?? [],
+      };
+    });
 
   // Always return tree separated by sports type in fixed order (Soccer, Basketball, Cricket, … Other)
   const ordered: SportsTreeGroupWithLive[] = [];
   for (const typeName of ORDERED_TYPE_NAMES) {
     const tagMap = byType.get(typeName);
     const items = tagMap ? Array.from(tagMap.values()) : [];
-    ordered.push({ typeName, tags: await toTagsWithLive(items) });
+    ordered.push({ typeName, tags: tagsForItems(items) });
   }
   // Append any type from API that is not in ORDERED_TYPE_NAMES (e.g. future new types)
   for (const [typeName, tagMap] of byType) {
     if (ORDERED_TYPE_NAMES.includes(typeName)) continue;
-    ordered.push({ typeName, tags: await toTagsWithLive(Array.from(tagMap.values())) });
+    ordered.push({ typeName, tags: tagsForItems(Array.from(tagMap.values())) });
   }
   return ordered;
 }

@@ -58,7 +58,9 @@ app.get("/api/sports", async (_req, res) => {
 
 app.get("/api/sports/tree", async (req, res) => {
   try {
-    const livePerTag = Math.min(20, Math.max(0, Number(req.query.livePerTag) ?? 5));
+    const raw = req.query.livePerTag;
+    const n = raw === undefined ? NaN : Number(raw);
+    const livePerTag = Number.isFinite(n) ? Math.min(20, Math.max(0, n)) : 5;
     const tree = await getSportsTree(livePerTag, dataOpts);
     res.json({ groups: tree });
   } catch (e) {

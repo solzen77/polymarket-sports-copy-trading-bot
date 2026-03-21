@@ -117,18 +117,12 @@ export class PolymarketApi {
 
   /** Fetch bid and ask for a token and return TokenPrice */
   async getTokenPrice(tokenId: string): Promise<TokenPrice | null> {
-    let bid: number | undefined;
-    let ask: number | undefined;
-    try {
-      bid = await this.getPrice(tokenId, "BUY");
-    } catch {
-      // ignore
-    }
-    try {
-      ask = await this.getPrice(tokenId, "SELL");
-    } catch {
-      // ignore
-    }
+    const [bidRes, askRes] = await Promise.allSettled([
+      this.getPrice(tokenId, "BUY"),
+      this.getPrice(tokenId, "SELL"),
+    ]);
+    const bid = bidRes.status === "fulfilled" ? bidRes.value : undefined;
+    const ask = askRes.status === "fulfilled" ? askRes.value : undefined;
     if (bid !== undefined || ask !== undefined)
       return { token_id: tokenId, bid, ask };
     return null;
