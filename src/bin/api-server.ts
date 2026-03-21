@@ -1,21 +1,26 @@
 /**
- * HTTP API server for the frontend (and other clients).
- * Exposes read-only Polymarket data: traders leaderboard, trader history, market state, price history.
+ * Local HTTP API for the Next.js app and other clients.
  *
- * Usage:
- *   # Backend env (example in .env.example):
- *   #   PORT=4004
- *   #   DATA_API_BASE=https://data-api.polymarket.com
- *   #   GAMMA_API_URL=https://gamma-api.polymarket.com
- *   #   CLOB_API_URL=https://clob.polymarket.com
+ * What it serves
+ * - Read-only Polymarket data (sports tree, live slugs, leaderboard, trader history, market + price history).
+ * - Copy-trading control: start/stop the copy-trading subprocess, read status and tail of the log file.
+ *
+ * Run
  *   npm run api
  *
- * Endpoints:
- *   GET /api/sports, /api/sports/tree, /api/sports/:tagId/live
- *   GET /api/traders, /api/traders/:wallet/history
- *   GET /api/markets/:slug, /api/tokens/:tokenId/history
- *   GET /api/health, /api/copy-trading/status, /api/copy-trading/logs
- *   POST /api/copy-trading/start, /api/copy-trading/stop
+ * Environment (optional overrides; defaults match public Polymarket URLs)
+ *   PORT              Listen port (default 4004)
+ *   DATA_API_BASE     Data API (leaderboard, positions), e.g. https://data-api.polymarket.com
+ *   GAMMA_API_URL     Gamma API (sports, events), e.g. https://gamma-api.polymarket.com
+ *   CLOB_API_URL      CLOB (market + prices), e.g. https://clob.polymarket.com
+ *   COPY_TRADING_LOG_FILE  Path to copy-trading.log for GET /api/copy-trading/logs
+ *
+ * Routes (summary)
+ *   GET  /api/sports | /api/sports/tree | /api/sports/:tagId/live
+ *   GET  /api/traders | /api/traders/:wallet/history
+ *   GET  /api/markets/:slug | /api/tokens/:tokenId/history
+ *   GET  /api/health | /api/copy-trading/status | /api/copy-trading/logs
+ *   POST /api/copy-trading/start | /api/copy-trading/stop
  */
 
 import "dotenv/config";
@@ -159,7 +164,7 @@ app.post("/api/copy-trading/start", (req, res) => {
     poll_interval_ms: 3000,
     copy_trade_amount_usd: 5,
   });
-  // Use shell so "npx" is resolved on Windows (spawn npx ENOENT otherwise)
+  // shell: true so the shell resolves npx on PATH (Windows often fails with shell:false + spawn("npx", ...)).
   const child = spawn("npx tsx src/bin/copy-trading.ts", {
     shell: true,
     cwd: process.cwd(),

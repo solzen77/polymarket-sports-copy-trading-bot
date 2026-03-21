@@ -1,14 +1,12 @@
 /**
- * Copy-trading bot: copy selected traders' buy/sell on selected slugs.
- * - Polls Data API for traders' trades and replicates them.
- * - Manual buy/sell via CLI while running.
- * - start / stop / restart control.
+ * Copy-trading bot — poll selected traders' activity and mirror their trades on chosen markets.
+ * In non-headless mode you get a small REPL (commands are printed when you run it).
  *
- * Config: config.copyTrading.slugs, config.copyTrading.traders (proxy wallets).
+ * Configure copyTrading.slugs and copyTrading.traders in config.json, or set COPY_TRADING_* env vars.
  *
- * Usage:
- *   npm run copy-trading
- *   npm run copy-trading -- --no-simulation
+ * Run:
+ *   npm run copy-trading              (simulation)
+ *   npm run copy-trading:live         (real orders)
  */
 
 import "dotenv/config";
@@ -210,7 +208,7 @@ async function main(): Promise<void> {
   };
 
   const pollLoop = async (): Promise<void> => {
-    await pollOnce(false); // seed seen keys so we don't copy old trades on startup
+    await pollOnce(false); // First pass: record existing trades only (do not copy history on startup).
     while (true) {
       await pollOnce(state.copyRunning);
       await new Promise((r) => setTimeout(r, pollIntervalMs));

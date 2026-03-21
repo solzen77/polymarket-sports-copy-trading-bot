@@ -9,7 +9,7 @@ export interface PolymarketConfig {
   api_passphrase?: string;
   private_key?: string;
   proxy_wallet_address?: string;
-  /** 0 = EOA, 1 = Proxy, 2 = GnosisSafe */
+  /** CLOB signer mode: 0 = EOA wallet, 1 = Polymarket proxy, 2 = Gnosis Safe. */
   signature_type?: number;
 }
 
@@ -25,24 +25,24 @@ export interface TradingConfig {
   [key: string]: unknown;
 }
 
-/** Copy-trading: copy selected traders' buy/sell on selected market slugs. */
+/** Copy-trading bot: mirror other users' trades on chosen markets. */
 export interface CopyTradingConfig {
-  /** Market slugs to copy trade on (e.g. from live-slugs). */
+  /** Market URL slugs to watch (same strings as the live-slugs CLI / Polymarket URLs). */
   slugs: string[];
-  /** Trader proxy wallet addresses (0x...) to copy. */
+  /** Proxy wallet addresses (0x...) of traders to follow. */
   traders: string[];
-  /** Poll interval in ms for fetching copied traders' trades (default 3000). */
+  /** How often to poll for new trades, milliseconds (default 3000). */
   poll_interval_ms?: number;
-  /** USD amount per copied trade (default 5). */
+  /** Notional USD size each time you copy a trade (default 5). */
   copy_trade_amount_usd?: number;
-  /** If true, only log copy actions without placing real orders. */
+  /** If true, print what would be traded but do not send real orders. */
   simulation?: boolean;
 }
 
 export interface Config {
   polymarket: PolymarketConfig;
   trading: TradingConfig;
-  /** Optional: used by copy-trading bot. */
+  /** Set when using the copy-trading bot (config file or COPY_TRADING_* env). */
   copyTrading?: CopyTradingConfig;
 }
 
@@ -178,7 +178,7 @@ export interface Args {
   simulation: boolean;
   noSimulation: boolean;
   config: string;
-  /** If set, only list current live slugs for sports and exit. Optional value = sport filter (e.g. "nba"). */
+  /** If set, print sports + live slugs then exit. Use optional filter string (e.g. nba) to narrow the list. */
   listSlugs?: string;
 }
 

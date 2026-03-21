@@ -1,20 +1,12 @@
 /**
- * Manual trading bot:
- * - User provides a live slug
- * - Script shows current market state (outcomes, token IDs, bid/ask/mid)
- * - User can manually buy/sell during runtime
+ * Interactive CLI: open one market by slug, view quotes, then buy/sell by typing commands.
  *
- * Usage:
- *   npm run manual-trading -- <slug>
- *   npm run manual-trading:live -- <slug>
+ * Run:
+ *   npm run manual-trading -- <slug>          (simulation default)
+ *   npm run manual-trading:live -- <slug>     (real orders)
  *
- * Commands:
- *   refresh
- *   buy <outcomeIndex|tokenId> <usd>
- *   sell <outcomeIndex|tokenId> <usd>
- *   status
- *   help
- *   quit
+ * REPL commands:
+ *   refresh | buy <outcomeIndex|tokenId> <usd> | sell <outcomeIndex|tokenId> <usd> | status | help | quit
  */
 
 import "dotenv/config";

@@ -1,7 +1,8 @@
 /**
- * Sports trailing bot: trade a single market by slug.
- * Trail the token whose price is going down first (buy when price >= lowest + trailing_stop),
- * then trail and buy the opposite token. Option: once per market or continuous.
+ * Sports trailing bot — automated trading on one Polymarket market (by slug).
+ *
+ * Idea: watch both outcome tokens; when one dips, use a trailing stop to buy it, then optionally
+ * trail and buy the other side. Can run once or loop (`continuous` in config).
  */
 
 import "dotenv/config";
@@ -12,7 +13,7 @@ import { Trader } from "../trader.js";
 import type { TokenPrice } from "../models.js";
 import type { BuyOpportunity, TokenType } from "../models.js";
 
-/** List sports betting list first, then current live slugs per sport. */
+/** Print all sports, then (optionally filtered) each sport's current live market slugs. */
 async function runListSlugs(api: PolymarketApi, sportFilter: string): Promise<void> {
   const allSports = await api.getSports();
   if (allSports.length === 0) {
@@ -20,7 +21,7 @@ async function runListSlugs(api: PolymarketApi, sportFilter: string): Promise<vo
     return;
   }
 
-  // 1. Always show the full sports betting list first
+  // Step 1: full catalog from Gamma /sports
   logger.info("\n📋 Sports betting list (available sports):");
   logger.info("═".repeat(50));
   allSports.forEach((s, i) => {
@@ -39,7 +40,7 @@ async function runListSlugs(api: PolymarketApi, sportFilter: string): Promise<vo
     logger.info(`Filter: "${sportFilter}" → ${toShow.length} sport(s)\n`);
   }
 
-  // 2. Then show current live slugs per sport
+  // Step 2: for each sport (or filter), list active market slugs
   logger.info("📋 Current live slugs (active markets) per sport:");
   logger.info("═".repeat(50));
   for (const sport of toShow) {
@@ -68,7 +69,7 @@ function firstBuyUnitsAndInvestment(baseShares: number, price: number): [number,
   return [units, investment];
 }
 
-/** Parse ISO 8601 end date to Unix timestamp (seconds). */
+/** Convert market end date string to Unix time in seconds (used for time-to-expiry checks). */
 function parseEndDateIso(s: string): number | null {
   const t = s.trim();
   if (t.length === 10 && t[4] === "-" && t[7] === "-") {

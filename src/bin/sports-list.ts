@@ -1,6 +1,7 @@
 /**
- * Print the sports betting list only (no live slugs).
- * Usage: npm run sports-list  or  npx tsx src/bin/sports-list.ts
+ * Print Polymarket's sports/league list from Gamma (no per-sport live markets).
+ *
+ * Run: npm run sports-list
  */
 
 import "dotenv/config";

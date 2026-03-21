@@ -1,6 +1,9 @@
 /**
- * Read-only Polymarket data API (Data API, Gamma, CLOB).
- * Used by the HTTP API server and can be reused by CLIs.
+ * Read-only helpers for Polymarket HTTP APIs (no trading).
+ * - Data API: leaderboard, closed positions
+ * - Gamma: sports, events/markets by tag or slug
+ * - CLOB: market details, price history
+ * Used by src/bin/api-server.ts and CLIs. Pass DataApiOptions to override base URLs or attach AbortSignal.
  */
 
 import { TAG_ID_TO_TYPE, ORDERED_TYPE_NAMES } from "./sports-tree-config.js";
@@ -10,9 +13,10 @@ const DEFAULT_GAMMA_API = "https://gamma-api.polymarket.com";
 const DEFAULT_CLOB_API = "https://clob.polymarket.com";
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-/** Max parallel Gamma `/events` calls when building the sports tree (balance latency vs upstream load). */
+/** Sports tree: at most this many Gamma `/events?tag_id=...` requests run at once (faster than sequential, easier on Polymarket than unbounded parallel). */
 const SPORTS_TREE_LIVE_FETCH_CONCURRENCY = 12;
 
+/** Run an async function over every item; only N tasks run at once; output order matches input order. */
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
@@ -126,7 +130,11 @@ export interface SportsTreeGroupWithLive {
   tags: SportsTreeTagWithLive[];
 }
 
-/** Build sports tree from real Polymarket data: fetch sports from Gamma, group by type, attach live slugs per tag. */
+/**
+ * Build the sidebar-style sports tree: load `/sports`, bucket tags by category (see `sports-tree-config`),
+ * fetch a few live markets per tag (bounded concurrency), then return groups in `ORDERED_TYPE_NAMES` order
+ * plus any extra categories not in that list.
+ */
 export async function getSportsTree(
   livePerTag = 5,
   opts?: DataApiOptions
@@ -164,7 +172,7 @@ export async function getSportsTree(
       try {
         liveSlugs = await getLiveMarketsByTagId(tagId, livePerTag, opts);
       } catch {
-        /* leave empty on error */
+        /* Per-tag failure: show this tag with no live markets instead of failing the whole tree. */
       }
       return { key: tagId.toLowerCase(), label, tagId, liveSlugs };
     }
@@ -185,14 +193,14 @@ export async function getSportsTree(
       };
     });
 
-  // Always return tree separated by sports type in fixed order (Soccer, Basketball, Cricket, … Other)
+  // Primary groups: fixed order (Soccer first, Other before any leftovers).
   const ordered: SportsTreeGroupWithLive[] = [];
   for (const typeName of ORDERED_TYPE_NAMES) {
     const tagMap = byType.get(typeName);
     const items = tagMap ? Array.from(tagMap.values()) : [];
     ordered.push({ typeName, tags: tagsForItems(items) });
   }
-  // Append any type from API that is not in ORDERED_TYPE_NAMES (e.g. future new types)
+  // Rare: new category names from the API that are not listed in ORDERED_TYPE_NAMES yet.
   for (const [typeName, tagMap] of byType) {
     if (ORDERED_TYPE_NAMES.includes(typeName)) continue;
     ordered.push({ typeName, tags: tagsForItems(Array.from(tagMap.values())) });

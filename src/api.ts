@@ -3,22 +3,27 @@ import type { Config, PolymarketConfig } from "./config.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-/** Sport from Gamma /sports */
+/** One row from Gamma GET /sports (league code, display label, tag used for event filters). */
 export interface Sport {
   id: number;
   sport: string;
-  label: string; // display name e.g. "NBA"
-  tagId: string; // first tag ID used for filtering events
+  /** Short label, usually uppercase (e.g. NBA). */
+  label: string;
+  /** Primary Gamma tag_id for this sport (filters /events?tag_id=...). */
+  tagId: string;
 }
 
-/** Live market/event option for selection */
+/** One selectable market: URL slug, question text, optional parent event title. */
 export interface LiveMarketOption {
   slug: string;
   question: string;
   eventTitle?: string;
 }
 
-/** Polymarket API: Gamma (events/markets) + CLOB (price, book). Order placement via ClobClient. */
+/**
+ * Trading bots: HTTP client for Gamma (markets/events) and CLOB (prices, books, orders).
+ * Placing orders uses createClobClient() against CLOB, not raw fetch in this class.
+ */
 export class PolymarketApi {
   private gammaUrl: string;
   private clobUrl: string;
@@ -30,7 +35,7 @@ export class PolymarketApi {
     this.config = config;
   }
 
-  /** GET Gamma: /sports - list all sports (NBA, NFL, etc.) */
+  /** Gamma GET /sports — all sports/leagues Polymarket exposes. */
   async getSports(): Promise<Sport[]> {
     const url = `${this.gammaUrl}/sports`;
     const res = await fetch(url, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
@@ -47,7 +52,7 @@ export class PolymarketApi {
     });
   }
 
-  /** GET Gamma: events by tag_id (sport) -> flatten to live market options with slug + question */
+  /** Gamma GET /events?tag_id=... — active events for a sport; flattened to slug + question rows. */
   async getLiveMarketsByTagId(tagId: string, limit = 50): Promise<LiveMarketOption[]> {
     const url = `${this.gammaUrl}/events?tag_id=${encodeURIComponent(tagId)}&active=true&closed=false&limit=${limit}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
@@ -95,7 +100,7 @@ export class PolymarketApi {
     return this.normalizeMarket(raw);
   }
 
-  /** GET CLOB: market details by condition_id */
+  /** CLOB GET /markets/:conditionId — tokens, dates, etc. */
   async getMarket(conditionId: string): Promise<MarketDetails> {
     const url = `${this.clobUrl}/markets/${conditionId}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
@@ -104,7 +109,7 @@ export class PolymarketApi {
     return json as unknown as MarketDetails;
   }
 
-  /** GET CLOB: price for token (side BUY or SELL). No auth. */
+  /** CLOB GET /price — BUY side ≈ best bid, SELL side ≈ best ask; public endpoint. */
   async getPrice(tokenId: string, side: "BUY" | "SELL"): Promise<number> {
     const url = `${this.clobUrl}/price?side=${side}&token_id=${encodeURIComponent(tokenId)}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
@@ -115,7 +120,7 @@ export class PolymarketApi {
     return Number(priceStr);
   }
 
-  /** Fetch bid and ask for a token and return TokenPrice */
+  /** Best bid (BUY side) and ask (SELL side) for one outcome token; both requests run in parallel. */
   async getTokenPrice(tokenId: string): Promise<TokenPrice | null> {
     const [bidRes, askRes] = await Promise.allSettled([
       this.getPrice(tokenId, "BUY"),
@@ -145,12 +150,12 @@ export class PolymarketApi {
   }
 }
 
-/** Build ClobClient from config. Caller must use this for place_market_order. */
+/** Authenticated CLOB client for placing orders (uses private key; Polygon chain id 137). */
 export async function createClobClient(config: Config): Promise<import("@polymarket/clob-client").ClobClient> {
   const { ClobClient } = await import("@polymarket/clob-client");
   const { Wallet } = await import("@ethersproject/wallet");
   const host = config.polymarket.clob_api_url.replace(/\/$/, "");
-  const chainId = 137 as import("@polymarket/clob-client").Chain; // Polygon
+  const chainId = 137 as import("@polymarket/clob-client").Chain; // Polygon mainnet
   const privateKey = config.polymarket.private_key;
   if (!privateKey)
     throw new Error("private_key is required in config for CLOB client");

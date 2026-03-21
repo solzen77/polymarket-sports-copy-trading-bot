@@ -1,6 +1,9 @@
 /**
- * Get live slugs for a selected sport from the sports list.
- * Usage: npm run live-slugs -- nba   or   npm run live-slugs -- 34   or   npx tsx src/bin/live-slugs.ts nfl
+ * List active market slugs for one sport (pick by league code, label, or tag id).
+ *
+ * Run:
+ *   npm run live-slugs -- nba
+ *   npm run live-slugs -- 34
  */
 
 import "dotenv/config";

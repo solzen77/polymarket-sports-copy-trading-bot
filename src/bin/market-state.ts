@@ -1,13 +1,8 @@
 /**
- * Show current real market state for a chosen live slug.
+ * Inspect one live market: tokens, current bid/ask/mid, and recent price history (for charts).
  *
- * - Resolves slug -> conditionId and tokens
- * - Prints current bid/ask/mid for each outcome token
- * - Fetches simple price history series for each token for charting
- *
- * Usage:
+ * Run:
  *   npm run market-state -- <slug>
- *   npx tsx src/bin/market-state.ts <slug>
  *
  * Example:
  *   npm run market-state -- will-the-oklahoma-city-thunder-win-the-2026-nba-finals

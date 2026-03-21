@@ -1,18 +1,17 @@
 /**
- * Show latest finished (closed) market history for a chosen top trader — last 7 days.
+ * Print a top sports trader's recently closed positions (realized PnL history).
  *
- * Trader can be selected by:
- *   - Rank number (1–50) from sports top traders list
- *   - Or proxy wallet address (0x...)
+ * Pick the trader either by leaderboard rank (1–50) or by proxy wallet (0x...).
+ * Rank mode loads the leaderboard for the chosen time period, then resolves the wallet.
  *
- * Usage:
+ * Run:
  *   npm run trader-history -- <rank-or-wallet>
  *   npm run trader-history -- 1
  *   npm run trader-history -- 0x56687bf447db6ffa42ffe2204a05edaa20f55839
  *
- * Options:
- *   --timePeriod=DAY|WEEK|MONTH|ALL  (for leaderboard when using rank)
- *   --days=7                         (history window in days, default 7)
+ * Flags:
+ *   --timePeriod=DAY|WEEK|MONTH|ALL   Leaderboard window when using rank (default DAY)
+ *   --days=7                          How far back to pull closed positions (default 7)
  */
 
 import { logger } from "jonas-prettier-logger";

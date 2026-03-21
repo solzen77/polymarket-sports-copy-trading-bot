@@ -1,9 +1,9 @@
 /**
- * Maps Polymarket tagId -> display type name for grouping.
- * Tag list comes from real Polymarket Gamma API; this file only defines how to group them.
+ * Static mapping: Gamma sport tag_id -> human-readable group (Soccer, Basketball, ...).
+ * The list of sports comes from the live API; this file only controls sidebar grouping and order.
  */
 
-/** tagId (lowercase) -> type name for sidebar grouping */
+/** Lowercase tag_id -> group title shown in the UI. */
 export const TAG_ID_TO_TYPE: Record<string, string> = {
   epl: "Soccer / Association football",
   lal: "Soccer / Association football",
@@ -166,7 +166,7 @@ export const TAG_ID_TO_TYPE: Record<string, string> = {
   ruchamp: "Other",
 };
 
-/** Order of group names in the tree (Other last). */
+/** Sidebar section order; categories not listed here are appended after "Other". */
 export const ORDERED_TYPE_NAMES: string[] = [
   "Soccer / Association football",
   "Basketball",
@@ -180,7 +180,7 @@ export const ORDERED_TYPE_NAMES: string[] = [
   "Other",
 ];
 
-/** Tag IDs that belong to each type (for live slugs by sport). */
+/** Reverse index: group name -> all tag_ids in that group (handy for filters or tests). */
 export function getTagIdsByType(): Map<string, string[]> {
   const byType = new Map<string, string[]>();
   for (const [tagId, typeName] of Object.entries(TAG_ID_TO_TYPE)) {

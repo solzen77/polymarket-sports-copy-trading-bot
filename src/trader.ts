@@ -81,7 +81,7 @@ export class Trader {
       return;
     }
 
-    // Live: place market order (BUY amount in USD)
+    // Non-simulation: submit a real CLOB market BUY for the computed USD size.
     const amountStr = orderAmount.toFixed(2);
     const response = await this.placeMarketOrder(opportunity.token_id, Number(amountStr), "BUY");
     if (response.status !== "live" && response.status !== "matched" && response.status !== "delayed" && response.status !== "unmatched")

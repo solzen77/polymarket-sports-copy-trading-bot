@@ -1,13 +1,12 @@
 /**
- * Get current top traders for SPORTS from Polymarket Data API leaderboard.
+ * Fetch and print the Polymarket sports leaderboard (Data API).
  *
- * Default: DAY, SPORTS, PNL, limit=50.
+ * Defaults: SPORTS category, sorted by PnL, last DAY, up to 50 rows.
  *
- * Usage:
+ * Run:
  *   npm run sports-top-traders
- *   npx tsx src/bin/sports-top-traders.ts
  *
- * Options:
+ * Flags:
  *   --timePeriod=DAY|WEEK|MONTH|ALL
  *   --orderBy=PNL|VOL
  *   --limit=1..50
